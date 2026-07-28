@@ -76,62 +76,83 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                     except OSError:
                         pass
 
-    # 第一块：生成文件 ID
+    # 第一块：生成文件 ID 并清理旧 chunk 文件
     if chunk_index == 0:
         file_id = sha256(str(time.time()) + str(uid) + file_name)
-        temp_path = "res/{}/file/.tmp_{}_{}".format(port_api, uid, file_id)
+        chunk_dir = "res/{}/file/".format(port_api)
+        prefix = ".tmp_{}_{}_".format(uid, file_id)
+        if os.path.isdir(chunk_dir):
+            for fname in os.listdir(chunk_dir):
+                if fname.startswith(prefix):
+                    try:
+                        os.remove(os.path.join(chunk_dir, fname))
+                    except OSError:
+                        pass
         try:
-            dir_path = os.path.dirname(temp_path)
-            if not os.path.exists(dir_path):
-                os.makedirs(dir_path)
+            if not os.path.exists(chunk_dir):
+                os.makedirs(chunk_dir)
         except Exception as e:
             return {"success": False, "error": str(e)}
     else:
         if not file_id:
             return {"success": False, "error": "Missing file_id"}
-        temp_path = "res/{}/file/.tmp_{}_{}".format(port_api, uid, file_id)
-        if not os.path.exists(temp_path):
+        chunk0 = "res/{}/file/.tmp_{}_{}_0".format(port_api, uid, file_id)
+        if not os.path.exists(chunk0):
             return {"success": False, "error": "Invalid file_id"}
     
-    # 追加写入块数据（二进制模式）
+    # 每个 chunk 写入独立文件，避免并发追加交错
+    chunk_path = "res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, chunk_index)
     try:
-        with open(temp_path, "ab") as f:
+        with open(chunk_path, "wb") as f:
             f.write(decoded_chunk)
     except Exception as e:
         return {"success": False, "error": "Write failed: " + str(e)}
     
-    # 最后一块：完成上传，计算最终哈希并移动文件
+    # 最后一块：校验完整性、合并、计算哈希并存储
     if chunk_index == chunk_total - 1:
+        combined = "res/{}/file/.tmp_{}_final".format(port_api, file_id)
         try:
-            # 计算完整文件的哈希
-            with open(temp_path, "rb") as f:
+            # 校验所有 chunk 均已接收
+            for i in range(chunk_total):
+                cp = "res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i)
+                if not os.path.exists(cp):
+                    return {"success": False, "error": "Missing chunk {}".format(i)}
+            
+            # 合并 chunk
+            with open(combined, "wb") as out:
+                for i in range(chunk_total):
+                    cp = "res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i)
+                    with open(cp, "rb") as f:
+                        out.write(f.read())
+            
+            # 计算哈希
+            with open(combined, "rb") as f:
                 file_hash = sha256(f.read())
             
-            # 哈希校验：如果客户端提供了期望哈希，进行验证
             if expected_hash and file_hash != expected_hash:
-                os.remove(temp_path)
-                return {
-                    "success": False, 
-                    "error": "Hash verification failed",
-                    "details": f"Expected {expected_hash}, got {file_hash}"
-                }
+                os.remove(combined)
+                return {"success": False, "error": "Hash verification failed"}
             
             final_path = "res/{}/file/{}.file".format(port_api, file_hash)
-            os.rename(temp_path, final_path)
+            os.rename(combined, final_path)
             
-            # 数据库记录
             if file_cursor:
                 file_cursor.tag_file(uid, file_name, time.time(), file_hash)
                 remove_outdate(port_api, file_cursor)
             
+            # 清理 chunk 临时文件
+            for i in range(chunk_total):
+                try:
+                    os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
+                except OSError:
+                    pass
+            
             return {"success": True, "file_hash": file_hash, "verified": expected_hash is not None}
         except Exception as e:
-            # 清理失败的临时文件
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            if os.path.exists(combined):
+                os.remove(combined)
             return {"success": False, "error": "Finalization failed: " + str(e)}
     
-    # 中间块：返回成功和 file_id
     return {"success": True, "file_id": file_id}
 
 
