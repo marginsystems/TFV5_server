@@ -73,13 +73,21 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
         tmp_dir = "res/{}/file/".format(port_api)
         if os.path.isdir(tmp_dir):
             for fname in os.listdir(tmp_dir):
-                if fname.startswith(".tmp_"):
+                if fname.startswith(".tmp_{}_".format(uid)):
                     try:
                         fpath = os.path.join(tmp_dir, fname)
                         if time.time() - os.path.getmtime(fpath) > 3600:
                             os.remove(fpath)
                     except OSError:
                         pass
+            existing_ids = set()
+            for fname in os.listdir(tmp_dir):
+                if fname.startswith(".tmp_{}_".format(uid)):
+                    parts = fname.split("_")
+                    if len(parts) >= 4:
+                        existing_ids.add(parts[3])
+            if len(existing_ids) >= 5:
+                return {"success": False, "error": "Too many concurrent uploads"}
 
     # 第一块：生成文件 ID 并清理旧 chunk 文件
     if chunk_index == 0:
@@ -98,12 +106,26 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                 os.makedirs(chunk_dir)
         except Exception as e:
             return {"success": False, "error": str(e)}
+        total_path_tmp = os.path.join(chunk_dir, ".tmp_{}_{}_total".format(uid, file_id))
+        try:
+            with open(total_path_tmp, "w") as tf:
+                tf.write(str(chunk_total))
+        except Exception as e:
+            return {"success": False, "error": "Failed to record chunk info: " + str(e)}
     else:
         if not file_id:
             return {"success": False, "error": "Missing file_id"}
         chunk0 = "res/{}/file/.tmp_{}_{}_0".format(port_api, uid, file_id)
         if not os.path.exists(chunk0):
             return {"success": False, "error": "Invalid file_id"}
+        total_path_tmp = "res/{}/file/.tmp_{}_{}_total".format(port_api, uid, file_id)
+        try:
+            with open(total_path_tmp, "r") as tf:
+                recorded_total = int(tf.read().strip())
+        except Exception as e:
+            return {"success": False, "error": "Failed to read chunk info: " + str(e)}
+        if recorded_total != chunk_total:
+            return {"success": False, "error": "chunk_total mismatch"}
     
     # 每个 chunk 写入独立文件，避免并发追加交错
     chunk_path = "res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, chunk_index)
@@ -116,6 +138,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     # 最后一块：校验完整性、合并、计算哈希并存储
     if chunk_index == chunk_total - 1:
         combined = "res/{}/file/.tmp_{}_final".format(port_api, file_id)
+        total_path_tmp = "res/{}/file/.tmp_{}_{}_total".format(port_api, uid, file_id)
         try:
             # 校验所有 chunk 均已接收
             for i in range(chunk_total):
@@ -142,6 +165,10 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                         os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
                     except OSError:
                         pass
+                try:
+                    os.remove(total_path_tmp)
+                except OSError:
+                    pass
                 return {"success": False, "error": "Hash verification failed"}
             
             final_path = "res/{}/file/{}.file".format(port_api, file_hash)
@@ -157,6 +184,10 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                     os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
                 except OSError:
                     pass
+            try:
+                os.remove(total_path_tmp)
+            except OSError:
+                pass
             
             return {"success": True, "file_hash": file_hash, "verified": expected_hash is not None}
         except Exception as e:
@@ -167,6 +198,10 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                     os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
                 except OSError:
                     pass
+            try:
+                os.remove(total_path_tmp)
+            except OSError:
+                pass
             return {"success": False, "error": "Finalization failed: " + str(e)}
     
     return {"success": True, "file_id": file_id}
