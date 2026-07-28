@@ -1,5 +1,6 @@
 import os
 import base64
+import random
 import time
 from db import FileDb
 import hashlib
@@ -137,7 +138,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     
     # 最后一块：校验完整性、合并、计算哈希并存储
     if chunk_index == chunk_total - 1:
-        combined = "res/{}/file/.tmp_{}_final".format(port_api, file_id)
+        combined = "res/{}/file/.tmp_{}_final_{}".format(port_api, file_id, random.getrandbits(64))
         total_path_tmp = "res/{}/file/.tmp_{}_{}_total".format(port_api, uid, file_id)
         try:
             # 校验所有 chunk 均已接收

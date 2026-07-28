@@ -570,7 +570,7 @@ def main(port_api : int, port_tcp : int, pub_pem, pri, ImgCaptcha, user_cursor, 
         except KeyError as e:
             return json.dumps({"success": False, "error": "Missing parameter: " + str(e)})
         except Exception as e:
-            return json.dumps({"success": False, "error": "Server error: " + str(e)})
+            return json.dumps({"success": False, "error": "Server error"})
 
 
     @app.route('/file/get_file_info/<hashes>')
