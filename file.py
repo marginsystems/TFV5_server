@@ -52,13 +52,34 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     """
     # 单块大小限制（10MB）
     MAX_CHUNK_SIZE = 10 * 1024 * 1024
-    if len(chunk_data_b64) > MAX_CHUNK_SIZE:
+
+    if not isinstance(chunk_index, int) or not isinstance(chunk_total, int) or chunk_index < 0 or chunk_total < 1 or chunk_index >= chunk_total:
+        return {"success": False, "error": "Invalid chunk parameters"}
+
+    try:
+        decoded_chunk = base64.b64decode(chunk_data_b64)
+    except Exception as e:
+        return {"success": False, "error": "Decode failed: " + str(e)}
+
+    if len(decoded_chunk) > MAX_CHUNK_SIZE:
         return {"success": False, "error": "Chunk too large"}
-    
+
+    if chunk_index == 0:
+        tmp_dir = "res/{}/file/".format(port_api)
+        if os.path.isdir(tmp_dir):
+            for fname in os.listdir(tmp_dir):
+                if fname.startswith(".tmp_"):
+                    try:
+                        fpath = os.path.join(tmp_dir, fname)
+                        if time.time() - os.path.getmtime(fpath) > 3600:
+                            os.remove(fpath)
+                    except OSError:
+                        pass
+
     # 第一块：生成文件 ID
     if chunk_index == 0:
         file_id = sha256(str(time.time()) + str(uid) + file_name)
-        temp_path = "res/{}/file/.tmp_{}".format(port_api, file_id)
+        temp_path = "res/{}/file/.tmp_{}_{}".format(port_api, uid, file_id)
         try:
             dir_path = os.path.dirname(temp_path)
             if not os.path.exists(dir_path):
@@ -68,15 +89,16 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     else:
         if not file_id:
             return {"success": False, "error": "Missing file_id"}
-        temp_path = "res/{}/file/.tmp_{}".format(port_api, file_id)
+        temp_path = "res/{}/file/.tmp_{}_{}".format(port_api, uid, file_id)
+        if not os.path.exists(temp_path):
+            return {"success": False, "error": "Invalid file_id"}
     
     # 追加写入块数据（二进制模式）
     try:
-        decoded_chunk = base64.b64decode(chunk_data_b64)
         with open(temp_path, "ab") as f:
             f.write(decoded_chunk)
     except Exception as e:
-        return {"success": False, "error": "Decode or write failed: " + str(e)}
+        return {"success": False, "error": "Write failed: " + str(e)}
     
     # 最后一块：完成上传，计算最终哈希并移动文件
     if chunk_index == chunk_total - 1:

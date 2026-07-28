@@ -538,8 +538,8 @@ def main(port_api : int, port_tcp : int, pub_pem, pri, ImgCaptcha, user_cursor, 
             uid = req["uid"]
             password = req["password"]
             filename = req["filename"]
-            chunk_index = req.get("chunk_index", 0)
-            chunk_total = req.get("chunk_total", 1)
+            chunk_index = req["chunk_index"]
+            chunk_total = req["chunk_total"]
             chunk_data = req["chunk_data"]
             file_id = req.get("file_id", None)
             expected_hash = req.get("expected_hash", None)
