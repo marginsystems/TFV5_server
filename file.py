@@ -64,7 +64,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     try:
         decoded_chunk = base64.b64decode(chunk_data_b64)
     except Exception as e:
-        return {"success": False, "error": "Decode failed: " + str(e)}
+        return {"success": False, "error": "Decode failed"}
 
     if len(decoded_chunk) > MAX_CHUNK_SIZE:
         return {"success": False, "error": "Chunk too large"}
@@ -85,7 +85,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                 if fname.startswith(".tmp_{}_".format(uid)):
                     parts = fname.split("_")
                     if len(parts) >= 4:
-                        existing_ids.add(parts[3])
+                        existing_ids.add(parts[2])
             if len(existing_ids) >= 5:
                 return {"success": False, "error": "Too many concurrent uploads"}
 
@@ -105,13 +105,13 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
             if not os.path.exists(chunk_dir):
                 os.makedirs(chunk_dir)
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": "Directory creation failed"}
         total_path_tmp = os.path.join(chunk_dir, ".tmp_{}_{}_total".format(uid, file_id))
         try:
             with open(total_path_tmp, "w") as tf:
                 tf.write(str(chunk_total))
         except Exception as e:
-            return {"success": False, "error": "Failed to record chunk info: " + str(e)}
+            return {"success": False, "error": "Failed to record chunk info"}
     else:
         if not file_id:
             return {"success": False, "error": "Missing file_id"}
@@ -123,7 +123,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
             with open(total_path_tmp, "r") as tf:
                 recorded_total = int(tf.read().strip())
         except Exception as e:
-            return {"success": False, "error": "Failed to read chunk info: " + str(e)}
+            return {"success": False, "error": "Failed to read chunk info"}
         if recorded_total != chunk_total:
             return {"success": False, "error": "chunk_total mismatch"}
     
@@ -133,7 +133,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
         with open(chunk_path, "wb") as f:
             f.write(decoded_chunk)
     except Exception as e:
-        return {"success": False, "error": "Write failed: " + str(e)}
+        return {"success": False, "error": "Write failed"}
     
     # 最后一块：校验完整性、合并、计算哈希并存储
     if chunk_index == chunk_total - 1:
@@ -202,7 +202,7 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                 os.remove(total_path_tmp)
             except OSError:
                 pass
-            return {"success": False, "error": "Finalization failed: " + str(e)}
+            return {"success": False, "error": "Finalization failed"}
     
     return {"success": True, "file_id": file_id}
 
