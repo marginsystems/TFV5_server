@@ -118,19 +118,25 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
                 if not os.path.exists(cp):
                     return {"success": False, "error": "Missing chunk {}".format(i)}
             
-            # 合并 chunk
+            # 合并 chunk 并增量计算哈希
+            sha256_hash = hashlib.sha256()
             with open(combined, "wb") as out:
                 for i in range(chunk_total):
                     cp = "res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i)
                     with open(cp, "rb") as f:
-                        out.write(f.read())
+                        chunk = f.read()
+                        out.write(chunk)
+                        sha256_hash.update(chunk)
             
-            # 计算哈希
-            with open(combined, "rb") as f:
-                file_hash = sha256(f.read())
+            file_hash = sha256_hash.hexdigest()
             
             if expected_hash and file_hash != expected_hash:
                 os.remove(combined)
+                for i in range(chunk_total):
+                    try:
+                        os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
+                    except OSError:
+                        pass
                 return {"success": False, "error": "Hash verification failed"}
             
             final_path = "res/{}/file/{}.file".format(port_api, file_hash)
