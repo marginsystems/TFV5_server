@@ -52,9 +52,14 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
     """
     # 单块大小限制（10MB）
     MAX_CHUNK_SIZE = 10 * 1024 * 1024
+    # 单文件总大小上限（200MB，按最大块大小计算）
+    MAX_TOTAL_SIZE = 200 * 1024 * 1024
 
     if not isinstance(chunk_index, int) or not isinstance(chunk_total, int) or chunk_index < 0 or chunk_total < 1 or chunk_index >= chunk_total:
         return {"success": False, "error": "Invalid chunk parameters"}
+
+    if chunk_total * MAX_CHUNK_SIZE > MAX_TOTAL_SIZE:
+        return {"success": False, "error": "File too large"}
 
     try:
         decoded_chunk = base64.b64decode(chunk_data_b64)
