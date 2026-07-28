@@ -157,6 +157,11 @@ def chunked_upload_file(port_api : int, uid : int, file_name : str, chunk_index 
         except Exception as e:
             if os.path.exists(combined):
                 os.remove(combined)
+            for i in range(chunk_total):
+                try:
+                    os.remove("res/{}/file/.tmp_{}_{}_{}".format(port_api, uid, file_id, i))
+                except OSError:
+                    pass
             return {"success": False, "error": "Finalization failed: " + str(e)}
     
     return {"success": True, "file_id": file_id}

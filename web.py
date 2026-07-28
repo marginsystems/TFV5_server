@@ -545,12 +545,14 @@ def main(port_api : int, port_tcp : int, pub_pem, pri, ImgCaptcha, user_cursor, 
             expected_hash = req.get("expected_hash", None)
             
             # 验证用户
+            if not isinstance(uid, int):
+                return json.dumps({"success": False, "error": "Invalid uid"})
             user_stat = user_cursor.uid_query(uid)[0][4]
             if user_stat == 'banned':
-                return {"success": False, "error": "User banned"}
+                return json.dumps({"success": False, "error": "User banned"})
             
             if not user_cursor.verify_user(uid, password):
-                return {"success": False, "error": "Password incorrect"}
+                return json.dumps({"success": False, "error": "Password incorrect"})
             
             # 调用流式上传函数
             result = file.chunked_upload_file(
@@ -564,11 +566,11 @@ def main(port_api : int, port_tcp : int, pub_pem, pri, ImgCaptcha, user_cursor, 
                 file_cursor,
                 expected_hash
             )
-            return result
+            return json.dumps(result)
         except KeyError as e:
-            return {"success": False, "error": "Missing parameter: " + str(e)}
+            return json.dumps({"success": False, "error": "Missing parameter: " + str(e)})
         except Exception as e:
-            return {"success": False, "error": "Server error: " + str(e)}
+            return json.dumps({"success": False, "error": "Server error: " + str(e)})
 
 
     @app.route('/file/get_file_info/<hashes>')
